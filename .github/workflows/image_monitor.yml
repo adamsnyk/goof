@@ -1,0 +1,43 @@
+name: Snyk Container Monitor
+on:
+  push:
+    branches: [ develop, main, master ]
+jobs:
+  snyk-container-monitor:
+    name: Snyk Container
+    runs-on: ubuntu-latest
+    steps:
+        # Setup Snyk
+        - uses: actions/checkout@v1
+        - name: Use Node ${{ matrix.node-version }}
+          uses: actions/setup-node@v1
+          with:
+            node-version: ${{ matrix.node-version }}
+        - name: NPM Install
+          run: npm install
+        - name: Install Snyk
+          run: sudo npm install -g snyk
+        - name: Snyk Authenticate
+          run: snyk auth "$SNYK_TOKEN"
+          
+        # Setup Docker
+        - uses: actions/checkout@v1
+        - name: Login to DockerHub Registry
+          run: echo ${{ secrets.DOCKERHUB_PASSWORD }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
+        - name: Get the version
+          id: vars
+          run: echo ::set-output name=tag::$(echo ${GITHUB_REF:10})
+
+        # Build the Two Tags
+        - name: Build the tagged Docker image
+          run: docker build . --file Dockerfile -t wandb/core:${{steps.vars.outputs.tag}} -t wandb/core:latest
+
+        # Snyk Container Monitor
+        - name: Build the latest Docker image
+          run: snyk container monitor wandb/core:latest --file=Dockerfile
+
+        # Push the Two Tags (OPTIONAL)
+        - name: Push the tagged Docker image
+          run: docker push wandb/core:${{steps.vars.outputs.tag}}
+        - name: Push the latest Docker image
+          run: docker push wandb/core:latest
